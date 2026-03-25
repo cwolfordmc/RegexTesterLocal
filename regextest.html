@@ -1,0 +1,374 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Regex Tester</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px;
+    }
+
+    h1 {
+      font-size: 1.6rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      margin-bottom: 32px;
+      color: #ffffff;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 860px;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+    }
+
+    .field-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #888;
+      margin-bottom: 6px;
+    }
+
+    /* ── Regex input row ── */
+    .regex-row {
+      display: flex;
+      align-items: stretch;
+      gap: 0;
+      background: #1a1d27;
+      border: 1px solid #2e3244;
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .regex-row:focus-within { border-color: #5b7cf6; }
+
+    .regex-slash {
+      display: flex;
+      align-items: center;
+      padding: 0 12px;
+      font-size: 1.3rem;
+      color: #5b7cf6;
+      user-select: none;
+      background: transparent;
+    }
+
+    #regexInput {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #e0e0e0;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 1rem;
+      padding: 12px 0;
+    }
+
+    #flagsInput {
+      width: 72px;
+      background: transparent;
+      border: none;
+      border-left: 1px solid #2e3244;
+      outline: none;
+      color: #c792ea;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 1rem;
+      padding: 12px 10px;
+    }
+
+    /* ── Status bar ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-height: 22px;
+    }
+
+    #statusMsg {
+      font-size: 0.82rem;
+    }
+    #statusMsg.ok    { color: #4ade80; }
+    #statusMsg.error { color: #f87171; }
+    #statusMsg.none  { color: #888; }
+
+    #matchCount {
+      margin-left: auto;
+      font-size: 0.82rem;
+      color: #888;
+    }
+    #matchCount span { color: #5b7cf6; font-weight: 600; }
+
+    /* ── Log editor area ── */
+    .editor-wrapper {
+      position: relative;
+      border: 1px solid #2e3244;
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.2s;
+    }
+    .editor-wrapper:focus-within { border-color: #5b7cf6; }
+
+    /* Highlight layer sits behind the textarea */
+    #highlightLayer {
+      position: absolute;
+      inset: 0;
+      padding: 14px 16px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      white-space: pre-wrap;
+      word-break: break-all;
+      overflow: auto;
+      color: transparent; /* text invisible; only marks show */
+      pointer-events: none;
+      z-index: 1;
+    }
+
+    #logInput {
+      position: relative;
+      z-index: 2;
+      width: 100%;
+      min-height: 280px;
+      background: #1a1d27;
+      border: none;
+      outline: none;
+      resize: vertical;
+      color: #e0e0e0;
+      caret-color: #e0e0e0;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.9rem;
+      line-height: 1.6;
+      padding: 14px 16px;
+      /* make textarea transparent so highlight layer shows through */
+      background: transparent;
+    }
+
+    /* We need the textarea bg set on the wrapper */
+    .editor-wrapper { background: #1a1d27; }
+
+    mark.match {
+      background: rgba(91, 124, 246, 0.35);
+      border-radius: 2px;
+      color: transparent;
+      outline: 1px solid rgba(91, 124, 246, 0.6);
+    }
+
+    /* ── Match list ── */
+    #matchList {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .match-item {
+      display: flex;
+      align-items: baseline;
+      gap: 10px;
+      background: #1a1d27;
+      border: 1px solid #2e3244;
+      border-radius: 6px;
+      padding: 8px 14px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.85rem;
+    }
+
+    .match-index {
+      color: #5b7cf6;
+      font-size: 0.78rem;
+      min-width: 28px;
+    }
+
+    .match-value {
+      color: #ffd580;
+      word-break: break-all;
+    }
+
+    .match-pos {
+      margin-left: auto;
+      color: #555;
+      font-size: 0.75rem;
+      white-space: nowrap;
+    }
+
+    .no-matches {
+      color: #555;
+      font-size: 0.85rem;
+      text-align: center;
+      padding: 12px 0;
+    }
+  </style>
+</head>
+<body>
+
+<h1>Regex Tester</h1>
+
+<div class="container">
+
+  <!-- Regex input -->
+  <div>
+    <div class="field-label">Regular Expression</div>
+    <div class="regex-row">
+      <span class="regex-slash">/</span>
+      <input id="regexInput" type="text" placeholder="pattern" spellcheck="false" autocomplete="off" />
+      <span class="regex-slash">/</span>
+      <input id="flagsInput" type="text" value="g" placeholder="flags" spellcheck="false" maxlength="8" title="Flags: g i m s u" />
+    </div>
+  </div>
+
+  <!-- Status + match count -->
+  <div class="status-bar">
+    <span id="statusMsg" class="none">Enter a pattern above</span>
+    <span id="matchCount"></span>
+  </div>
+
+  <!-- Log / sample text -->
+  <div>
+    <div class="field-label">Sample Log</div>
+    <div class="editor-wrapper">
+      <div id="highlightLayer" aria-hidden="true"></div>
+      <textarea id="logInput" spellcheck="false" placeholder="Paste log or sample text here…"></textarea>
+    </div>
+  </div>
+
+  <!-- Match list -->
+  <div>
+    <div class="field-label">Matches</div>
+    <div id="matchList"><p class="no-matches">No matches yet</p></div>
+  </div>
+
+</div>
+
+<script>
+  const regexInput     = document.getElementById('regexInput');
+  const flagsInput     = document.getElementById('flagsInput');
+  const logInput       = document.getElementById('logInput');
+  const highlightLayer = document.getElementById('highlightLayer');
+  const statusMsg      = document.getElementById('statusMsg');
+  const matchCountEl   = document.getElementById('matchCount');
+  const matchList      = document.getElementById('matchList');
+
+  function escapeHtml(str) {
+    return str
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  function buildRegex() {
+    const pattern = regexInput.value;
+    if (!pattern) return null;
+    let flags = flagsInput.value.replace(/[^gimsud]/g, '');
+    // Ensure 'd' flag for indices when available, fallback gracefully
+    try {
+      return new RegExp(pattern, flags);
+    } catch (e) {
+      return { error: e.message };
+    }
+  }
+
+  function run() {
+    const text    = logInput.value;
+    const result  = buildRegex();
+
+    // Reset
+    highlightLayer.innerHTML = '';
+    matchList.innerHTML = '';
+    matchCountEl.innerHTML  = '';
+
+    if (!regexInput.value) {
+      statusMsg.className = 'none';
+      statusMsg.textContent = 'Enter a pattern above';
+      highlightLayer.textContent = text; // sync scroll sizing
+      matchList.innerHTML = '<p class="no-matches">No matches yet</p>';
+      return;
+    }
+
+    if (result && result.error) {
+      statusMsg.className   = 'error';
+      statusMsg.textContent = `Invalid regex: ${result.error}`;
+      highlightLayer.textContent = text;
+      matchList.innerHTML = '<p class="no-matches">Fix the pattern to see matches</p>';
+      return;
+    }
+
+    const re = result;
+
+    // Collect all matches (reset lastIndex for safety)
+    re.lastIndex = 0;
+    const matches = [];
+    let m;
+    if (re.global || re.sticky) {
+      while ((m = re.exec(text)) !== null) {
+        matches.push({ value: m[0], index: m.index });
+        if (m[0].length === 0) re.lastIndex++; // avoid infinite loop on zero-length match
+      }
+    } else {
+      m = re.exec(text);
+      if (m) matches.push({ value: m[0], index: m.index });
+    }
+
+    // Status
+    if (matches.length > 0) {
+      statusMsg.className   = 'ok';
+      statusMsg.textContent = 'Pattern is valid';
+      matchCountEl.innerHTML = `<span>${matches.length}</span> match${matches.length === 1 ? '' : 'es'}`;
+    } else {
+      statusMsg.className   = 'none';
+      statusMsg.textContent = 'Pattern is valid — no matches';
+      matchCountEl.innerHTML = '<span>0</span> matches';
+    }
+
+    // Build highlighted HTML for the layer
+    let html = '';
+    let cursor = 0;
+    for (const match of matches) {
+      html += escapeHtml(text.slice(cursor, match.index));
+      html += `<mark class="match">${escapeHtml(match.value)}</mark>`;
+      cursor = match.index + match.value.length;
+    }
+    html += escapeHtml(text.slice(cursor));
+    // Replace newlines so the layer mirrors textarea line breaks
+    highlightLayer.innerHTML = html.replace(/\n/g, '<br>');
+
+    // Match list
+    if (matches.length === 0) {
+      matchList.innerHTML = '<p class="no-matches">No matches found</p>';
+    } else {
+      matchList.innerHTML = matches.map((match, i) => `
+        <div class="match-item">
+          <span class="match-index">#${i + 1}</span>
+          <span class="match-value">${escapeHtml(match.value) || '<span style="color:#555">empty string</span>'}</span>
+          <span class="match-pos">index ${match.index}–${match.index + match.value.length}</span>
+        </div>`).join('');
+    }
+  }
+
+  // Sync scroll between textarea and highlight layer
+  logInput.addEventListener('scroll', () => {
+    highlightLayer.scrollTop  = logInput.scrollTop;
+    highlightLayer.scrollLeft = logInput.scrollLeft;
+  });
+
+  regexInput.addEventListener('input', run);
+  flagsInput.addEventListener('input', run);
+  logInput.addEventListener('input', run);
+
+  // Initial render
+  run();
+</script>
+</body>
+</html>
