@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Splunk props.conf Builder</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      background: #0f1117;
+      color: #e0e0e0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 40px 20px 80px;
+    }
+
+    .page-title {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 32px;
+    }
+
+    .splunk-badge {
+      background: #e8541e;
+      color: #fff;
+      font-size: 0.68rem;
+      font-weight: 800;
+      padding: 3px 8px;
+      border-radius: 4px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      font-size: 1.55rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      color: #ffffff;
+    }
+
+    /* ── Container ── */
+    .container {
+      width: 100%;
+      max-width: 1060px;
+      display: flex;
+      flex-direction: column;
+      gap: 22px;
+    }
+
+    /* ── Section card ── */
+    .section {
+      background: #1a1d27;
+      border: 1px solid #2e3244;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 11px 20px;
+      border-bottom: 1px solid #2e3244;
+      background: #141720;
+    }
+
+    .section-title {
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: #5b7cf6;
+    }
+
+    .section-body {
+      padding: 18px 20px;
+    }
+
+    /* ── Labels / hints ── */
+    .field-label {
+      display: block;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: #777;
+      margin-bottom: 5px;
+    }
+
+    .field-hint {
+      font-size: 0.7rem;
+      color: #4a5270;
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+
+    .field-group { display: flex; flex-direction: column; }
+
+    /* ── Inputs ── */
+    input[type="text"],
+    input[type="number"],
+    select,
+    textarea {
+      width: 100%;
+      background: #0f1117;
+      border: 1px solid #2e3244;
+      border-radius: 6px;
+      color: #e0e0e0;
+      font-family: inherit;
+      font-size: 0.88rem;
+      padding: 9px 12px;
+      outline: none;
+      transition: border-color 0.18s;
+    }
+
+    input:focus, select:focus, textarea:focus { border-color: #5b7cf6; }
+
+    .mono { font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace !important; }
+    textarea { resize: vertical; }
+    select option { background: #1a1d27; }
+
+    /* ── Sourcetype name input ── */
+    .sourcetype-wrap {
+      display: flex;
+      align-items: center;
+      background: #0f1117;
+      border: 1px solid #2e3244;
+      border-radius: 8px;
+      overflow: hidden;
+      transition: border-color 0.18s;
+    }
+    .sourcetype-wrap:focus-within { border-color: #5b7cf6; }
+
+    .st-bracket {
+      padding: 10px 12px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 1.1rem;
+      color: #ffd580;
+      user-select: none;
+      flex-shrink: 0;
+    }
+
+    #sourcetypeName {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 1rem;
+      color: #82aaff;
+      padding: 10px 4px;
+    }
+
+    /* ── Toggle ── */
+    .toggle-row { display: flex; align-items: center; gap: 10px; }
+    .toggle { position: relative; width: 42px; height: 22px; flex-shrink: 0; }
+    .toggle input { opacity: 0; width: 0; height: 0; }
+
+    .toggle-slider {
+      position: absolute; inset: 0;
+      background: #2e3244; border-radius: 22px;
+      cursor: pointer; transition: background 0.18s;
+    }
+    .toggle-slider::before {
+      content: ''; position: absolute;
+      width: 16px; height: 16px;
+      background: #666; border-radius: 50%;
+      left: 3px; top: 3px;
+      transition: transform 0.18s, background 0.18s;
+    }
+    .toggle input:checked + .toggle-slider { background: #223078; }
+    .toggle input:checked + .toggle-slider::before {
+      transform: translateX(20px); background: #5b7cf6;
+    }
+    .toggle-label { font-size: 0.85rem; color: #666; }
+
+    /* ── Grid ── */
+    .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; }
+
+    @media (max-width: 700px) {
+      .grid-2, .grid-3 { grid-template-columns: 1fr; }
+    }
+
+    /* ── Log sample textarea ── */
+    #logSample {
+      min-height: 150px;
+      line-height: 1.6;
+      font-size: 0.82rem;
+    }
+
+    /* ── Buttons ── */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 15px; border-radius: 6px;
+      border: 1px solid #2e3244; font-size: 0.8rem; font-weight: 600;
+      cursor: pointer; background: #1a1d27; color: #c8cde8;
+      transition: background 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+    .btn:hover { background: #22263a; border-color: #5b7cf6; }
+
+    .btn-primary { background: #1e2e6a; border-color: #4466cc; color: #a8c0ff; }
+    .btn-primary:hover { background: #2a3d90; }
+
+    .btn-sm { padding: 5px 11px; font-size: 0.75rem; }
+
+    .btn-danger { border-color: #3d1e1e; color: #f87171; background: #1a1515; }
+    .btn-danger:hover { background: #2a1a1a; border-color: #f87171; }
+
+    /* ── Tabs ── */
+    .tab-bar {
+      display: flex; gap: 0;
+      border-bottom: 1px solid #2e3244;
+      background: #141720;
+    }
+    .tab-btn {
+      padding: 11px 18px; font-size: 0.72rem; font-weight: 700;
+      letter-spacing: 0.07em; text-transform: uppercase;
+      color: #555; background: transparent; border: none;
+      cursor: pointer; border-bottom: 2px solid transparent;
+      transition: color 0.15s, border-color 0.15s;
+    }
+    .tab-btn:hover { color: #999; }
+    .tab-btn.active { color: #5b7cf6; border-bottom-color: #5b7cf6; }
+
+    .tab-panel { display: none; padding: 18px 20px; }
+    .tab-panel.active { display: block; }
+
+    /* ── Test results ── */
+    .test-toolbar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 14px;
+    }
+
+    .test-desc { font-size: 0.78rem; color: #666; }
+    .test-desc code {
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      color: #5b7cf6; font-size: 0.82rem;
+    }
+
+    .event-wrap { margin-bottom: 8px; }
+    .event-num {
+      font-size: 0.65rem; color: #5b7cf6; font-weight: 700;
+      letter-spacing: 0.08em; text-transform: uppercase;
+      margin-bottom: 3px; padding-left: 2px;
+    }
+    .event-block {
+      background: #0d1020; border: 1px solid #2e3244; border-radius: 6px;
+      padding: 9px 14px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.8rem; line-height: 1.6;
+      white-space: pre-wrap; word-break: break-all; color: #88d475;
+    }
+
+    /* Timestamp results */
+    .ts-result-box {
+      background: #0d1020; border: 1px solid #2e3244; border-radius: 8px;
+      overflow: hidden;
+    }
+    .ts-row {
+      display: flex; align-items: baseline; gap: 14px;
+      padding: 8px 16px; border-bottom: 1px solid #1a1e30;
+    }
+    .ts-row:last-child { border-bottom: none; }
+    .ts-key {
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.75rem; color: #667; min-width: 180px; flex-shrink: 0;
+    }
+    .ts-val {
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.85rem; color: #ffd580; word-break: break-all;
+    }
+    .ts-val.ok { color: #4ade80; }
+    .ts-val.err { color: #f87171; }
+    .ts-val.warn { color: #fbbf24; }
+
+    .ts-highlight-box {
+      margin: 0 16px 14px;
+      background: #141720; border: 1px solid #2e3244; border-radius: 6px;
+      padding: 10px 14px;
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.8rem; line-height: 1.65; word-break: break-all;
+    }
+    .ts-highlight-label {
+      font-size: 0.65rem; color: #555; letter-spacing: 0.08em;
+      text-transform: uppercase; margin-bottom: 5px;
+    }
+    mark.ts-match {
+      background: rgba(255, 213, 128, 0.2);
+      outline: 1px solid rgba(255, 213, 128, 0.45);
+      border-radius: 2px; color: #ffd580;
+    }
+
+    /* ── Status tags ── */
+    .status { font-size: 0.78rem; }
+    .status.ok { color: #4ade80; }
+    .status.err { color: #f87171; }
+    .status.warn { color: #fbbf24; }
+
+    /* ── Custom fields ── */
+    .custom-field-row {
+      display: flex; gap: 8px; align-items: center; margin-bottom: 7px;
+    }
+    .custom-field-row input { flex: 1; }
+    .cf-eq { color: #444; font-size: 1rem; flex-shrink: 0; padding: 0 2px; }
+    .rm-btn {
+      width: 28px; height: 28px; flex-shrink: 0;
+      background: #1a1515; border: 1px solid #3d1e1e;
+      border-radius: 5px; color: #f87171; font-size: 1rem;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      transition: background 0.15s;
+    }
+    .rm-btn:hover { background: #2a1a1a; }
+
+    /* ── Output ── */
+    #confOutput {
+      font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+      font-size: 0.85rem; line-height: 1.75;
+      color: #a9dc76; background: #0d1020;
+      border: 1px solid #2e3244; border-radius: 8px;
+      padding: 16px 20px; min-height: 160px;
+      white-space: pre; overflow-x: auto;
+    }
+
+    /* conf syntax tinting */
+    .conf-section  { color: #ffd580; }
+    .conf-key      { color: #82aaff; }
+    .conf-eq       { color: #555; }
+    .conf-val      { color: #a9dc76; }
+    .conf-comment  { color: #3d4a6d; font-style: italic; }
+
+    .copy-done { color: #4ade80 !important; }
+  </style>
+</head>
+<body>
+
+  <div class="page-title">
+    <span class="splunk-badge">Splunk</span>
+    <h1>props.conf Builder</h1>
+  </div>
+
+  <div class="container">
+
+    <!-- ── SOURCETYPE ── -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Sourcetype</span>
+      </div>
+      <div class="section-body">
+        <label class="field-label" for="sourcetypeName">Sourcetype Name</label>
+        <div class="sourcetype-wrap">
+          <span class="st-bracket">[</span>
+          <input type="text" id="sourcetypeName" placeholder="appbroker:esdservice" />
+          <span class="st-bracket">]</span>
+        </div>
+        <div class="field-hint">This becomes the stanza header in props.conf, e.g. <code style="color:#82aaff;font-family:monospace">[appbroker:esdservice]</code></div>
+      </div>
+    </div>
+
+    <!-- ── LOG SAMPLE ── -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Log Sample</span>
+        <span id="sampleLineCount" class="status" style="font-size:0.72rem;color:#555;"></span>
+      </div>
+      <div class="section-body">
+        <label class="field-label" for="logSample">Paste raw log lines here</label>
+        <textarea id="logSample" class="mono"
+          placeholder='time="14:35:02.123+0500" date="03-26-2026" level=INFO msg="Service started successfully"
+time="14:35:03.456+0500" date="03-26-2026" level=ERROR msg="Connection to database failed"
+time="14:35:04.789+0500" date="03-26-2026" level=WARN msg="Retry attempt 1 of 3"'></textarea>
+        <div class="field-hint">Used for LINE_BREAKER and timestamp extraction tests below.</div>
+      </div>
+    </div>
+
+    <!-- ── PARSER SETTINGS ── -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Parser Settings</span>
+      </div>
+      <div class="section-body" style="display:flex;flex-direction:column;gap:18px;">
+
+        <!-- Line merging & breaking -->
+        <div class="grid-2">
+          <div class="field-group">
+            <label class="field-label">SHOULD_LINEMERGE</label>
+            <div class="toggle-row" style="margin-top:4px;">
+              <label class="toggle">
+                <input type="checkbox" id="shouldLineMerge" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="toggle-label" id="shouldLineMergeLabel">false</span>
+            </div>
+            <div class="field-hint">Set to false for single-line events (recommended for most structured logs).</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="lineBreaker">LINE_BREAKER</label>
+            <input type="text" id="lineBreaker" class="mono" value="([\r\n]+)" />
+            <div class="field-hint">Regex where the captured group defines the event boundary separator.</div>
+          </div>
+        </div>
+
+        <!-- Timestamp -->
+        <div class="grid-2">
+          <div class="field-group">
+            <label class="field-label" for="timePrefix">TIME_PREFIX</label>
+            <input type="text" id="timePrefix" class="mono" placeholder='time="' />
+            <div class="field-hint">Literal text immediately preceding the timestamp in the log line.</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="timeFormat">TIME_FORMAT</label>
+            <input type="text" id="timeFormat" class="mono" placeholder='%H:%M:%S.%3N%z" date="%m-%d-%Y' />
+            <div class="field-hint">strptime directives: %Y %m %d %H %M %S %3N %z %Z %b — may include literal chars.</div>
+          </div>
+        </div>
+
+        <!-- Lookahead / TZ / Truncate -->
+        <div class="grid-3">
+          <div class="field-group">
+            <label class="field-label" for="maxTsLookahead">MAX_TIMESTAMP_LOOKAHEAD</label>
+            <input type="number" id="maxTsLookahead" value="80" min="0" />
+            <div class="field-hint">Characters from event start to scan for a timestamp.</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="tzField">TZ</label>
+            <input type="text" id="tzField" placeholder="US/Eastern" />
+            <div class="field-hint">Default timezone when none is in the log.</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="truncate">TRUNCATE</label>
+            <input type="number" id="truncate" value="99999" min="0" />
+            <div class="field-hint">Max raw event size in bytes (0 = unlimited).</div>
+          </div>
+        </div>
+
+        <!-- Binary / charset / disabled -->
+        <div class="grid-3">
+          <div class="field-group">
+            <label class="field-label">NO_BINARY_CHECK</label>
+            <div class="toggle-row" style="margin-top:4px;">
+              <label class="toggle">
+                <input type="checkbox" id="noBinaryCheck" checked />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="toggle-label" id="noBinaryCheckLabel">true</span>
+            </div>
+            <div class="field-hint">Skip binary file detection — set true for non-binary text logs.</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="charset">CHARSET</label>
+            <select id="charset">
+              <option value="UTF-8" selected>UTF-8</option>
+              <option value="Latin-1">Latin-1</option>
+              <option value="BIG5">BIG5</option>
+              <option value="GB2312">GB2312</option>
+              <option value="AUTO">AUTO</option>
+            </select>
+            <div class="field-hint">Character encoding of the log source.</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label">disabled</label>
+            <div class="toggle-row" style="margin-top:4px;">
+              <label class="toggle">
+                <input type="checkbox" id="disabled" />
+                <span class="toggle-slider"></span>
+              </label>
+              <span class="toggle-label" id="disabledLabel">false</span>
+            </div>
+            <div class="field-hint">Set true to disable this stanza.</div>
+          </div>
+        </div>
+
+        <!-- KV mode / indexed extractions / transforms -->
+        <div class="grid-3">
+          <div class="field-group">
+            <label class="field-label" for="kvMode">KV_MODE</label>
+            <select id="kvMode">
+              <option value="">(not set)</option>
+              <option value="none">none</option>
+              <option value="auto">auto</option>
+              <option value="auto_escaped">auto_escaped</option>
+              <option value="multi">multi</option>
+              <option value="xml">xml</option>
+              <option value="json">json</option>
+            </select>
+            <div class="field-hint">Key-value extraction mode for the event.</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="indexedExtractions">INDEXED_EXTRACTIONS</label>
+            <input type="text" id="indexedExtractions" placeholder="csv, json, w3c…" />
+            <div class="field-hint">Parse structured file formats at index time.</div>
+          </div>
+          <div class="field-group">
+            <label class="field-label" for="transforms">TRANSFORMS</label>
+            <input type="text" id="transforms" placeholder="transform1, transform2" />
+            <div class="field-hint">Comma-separated transforms stanza names to apply.</div>
+          </div>
+        </div>
+
+      </div><!-- /.section-body -->
+    </div>
+
+    <!-- ── ADDITIONAL FIELDS ── -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Additional Fields</span>
+        <button class="btn btn-sm" id="addFieldBtn">+ Add Field</button>
+      </div>
+      <div class="section-body">
+        <div id="customFields"></div>
+        <div class="field-hint" id="noCustomHint">No extra fields added. Click "Add Field" to include any directive not listed above.</div>
+      </div>
+    </div>
+
+    <!-- ── TEST ── -->
+    <div class="section">
+      <div class="tab-bar">
+        <button class="tab-btn active" data-tab="linebreak">&#9998; Line Breaker Test</button>
+        <button class="tab-btn" data-tab="timestamp">&#128336; Timestamp Test</button>
+      </div>
+
+      <!-- Line Breaker panel -->
+      <div class="tab-panel active" id="tab-linebreak">
+        <div class="test-toolbar">
+          <div class="test-desc">Tests <code>LINE_BREAKER</code> against the log sample — shows how events would be split.</div>
+          <button class="btn btn-sm btn-primary" id="testLineBreakBtn">Run Test</button>
+        </div>
+        <div id="lineBreakResults"></div>
+      </div>
+
+      <!-- Timestamp panel -->
+      <div class="tab-panel" id="tab-timestamp">
+        <div class="test-toolbar">
+          <div class="test-desc">Tests <code>TIME_PREFIX</code> + <code>TIME_FORMAT</code> against each log line.</div>
+          <button class="btn btn-sm btn-primary" id="testTimestampBtn">Run Test</button>
+        </div>
+        <div id="timestampResults"></div>
+      </div>
+    </div>
+
+    <!-- ── OUTPUT ── -->
+    <div class="section">
+      <div class="section-header">
+        <span class="section-title">Generated props.conf</span>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-sm btn-primary" id="generateBtn">&#8635; Regenerate</button>
+          <button class="btn btn-sm" id="copyBtn">&#9112; Copy</button>
+        </div>
+      </div>
+      <div class="section-body">
+        <div id="confOutput"></div>
+      </div>
+    </div>
+
+  </div><!-- /.container -->
+
+<script>
+// ── Utility ──────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function escRegex(s) {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ── Toggle helpers ────────────────────────────────────────────────────────────
+function bindToggle(id, labelId) {
+  const el  = document.getElementById(id);
+  const lbl = document.getElementById(labelId);
+  function sync() { lbl.textContent = el.checked ? 'true' : 'false'; }
+  el.addEventListener('change', sync);
+  sync();
+}
+bindToggle('shouldLineMerge', 'shouldLineMergeLabel');
+bindToggle('noBinaryCheck',   'noBinaryCheckLabel');
+bindToggle('disabled',        'disabledLabel');
+
+// ── Log sample line count ─────────────────────────────────────────────────────
+document.getElementById('logSample').addEventListener('input', updateSampleCount);
+function updateSampleCount() {
+  const lines = document.getElementById('logSample').value.split('\n').filter(l => l.trim());
+  const el = document.getElementById('sampleLineCount');
+  el.textContent = lines.length ? `${lines.length} line${lines.length !== 1 ? 's' : ''}` : '';
+}
+updateSampleCount();
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('tab-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// ── Custom field rows ─────────────────────────────────────────────────────────
+document.getElementById('addFieldBtn').addEventListener('click', () => addCustomField());
+
+function addCustomField(key = '', val = '') {
+  const hint = document.getElementById('noCustomHint');
+  if (hint) hint.remove();
+
+  const row = document.createElement('div');
+  row.className = 'custom-field-row';
+  row.innerHTML = `
+    <input type="text" class="mono cf-key" placeholder="SETTING_NAME" value="${esc(key)}" />
+    <span class="cf-eq">=</span>
+    <input type="text" class="mono cf-val" placeholder="value" value="${esc(val)}" />
+    <button class="rm-btn" title="Remove">&times;</button>
+  `;
+  row.querySelector('.rm-btn').addEventListener('click', () => {
+    row.remove();
+    if (!document.querySelector('.custom-field-row')) {
+      const div = document.createElement('div');
+      div.id = 'noCustomHint';
+      div.className = 'field-hint';
+      div.textContent = 'No extra fields added. Click "Add Field" to include any directive not listed above.';
+      document.getElementById('customFields').after(div);
+    }
+    generateConf();
+  });
+  row.querySelectorAll('input').forEach(i => i.addEventListener('input', generateConf));
+  document.getElementById('customFields').appendChild(row);
+  generateConf();
+}
+
+// ── strptime → JS regex ───────────────────────────────────────────────────────
+// Sorted longest-first so %3N doesn't get parsed as %3 + N
+const STRPTIME = [
+  ['%3N',  '\\d{3}'],
+  ['%6N',  '\\d{6}'],
+  ['%9N',  '\\d{9}'],
+  ['%N',   '\\d+'],
+  ['%Y',   '\\d{4}'],
+  ['%y',   '\\d{2}'],
+  ['%m',   '\\d{2}'],
+  ['%d',   '\\d{2}'],
+  ['%e',   ' ?\\d{1,2}'],
+  ['%H',   '\\d{2}'],
+  ['%I',   '\\d{1,2}'],
+  ['%M',   '\\d{2}'],
+  ['%S',   '\\d{2}'],
+  ['%z',   '[+-]\\d{2}:?\\d{2}|Z'],
+  ['%Z',   '[A-Z]{1,5}'],
+  ['%p',   '(?:AM|PM|am|pm)'],
+  ['%b',   '(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)'],
+  ['%B',   '(?:January|February|March|April|May|June|July|August|September|October|November|December)'],
+  ['%A',   '(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)'],
+  ['%a',   '(?:Mon|Tue|Wed|Thu|Fri|Sat|Sun)'],
+  ['%j',   '\\d{3}'],
+];
+
+function timeFormatToRegex(fmt) {
+  let i = 0, pattern = '';
+  while (i < fmt.length) {
+    if (fmt[i] === '%') {
+      let hit = false;
+      for (const [dir, re] of STRPTIME) {
+        if (fmt.startsWith(dir, i)) {
+          pattern += re;   // no capture groups — we want the full match string
+          i += dir.length;
+          hit = true; break;
+        }
+      }
+      if (!hit) { pattern += escRegex(fmt[i]); i++; }
+    } else {
+      pattern += escRegex(fmt[i]); i++;
+    }
+  }
+  return pattern;
+}
+
+// ── LINE BREAKER TEST ─────────────────────────────────────────────────────────
+document.getElementById('testLineBreakBtn').addEventListener('click', runLineBreakTest);
+
+function runLineBreakTest() {
+  const sample    = document.getElementById('logSample').value;
+  const lbPat     = document.getElementById('lineBreaker').value.trim();
+  const container = document.getElementById('lineBreakResults');
+  container.innerHTML = '';
+
+  if (!sample.trim()) {
+    container.innerHTML = '<div class="status warn">Paste a log sample above first.</div>'; return;
+  }
+  if (!lbPat) {
+    container.innerHTML = '<div class="status warn">LINE_BREAKER is empty.</div>'; return;
+  }
+
+  let rx;
+  try { rx = new RegExp(lbPat, 'g'); }
+  catch(e) {
+    container.innerHTML = `<div class="status err">Invalid regex: ${esc(e.message)}</div>`; return;
+  }
+
+  // Split on matches (the matched text is the separator, like Splunk does)
+  const events = [];
+  let last = 0, m;
+  rx.lastIndex = 0;
+  while ((m = rx.exec(sample)) !== null) {
+    const chunk = sample.slice(last, m.index);
+    if (chunk.length) events.push(chunk);
+    last = m.index + m[0].length;
+    if (m[0].length === 0) rx.lastIndex++; // avoid infinite loop on zero-width match
+  }
+  const tail = sample.slice(last);
+  if (tail.length) events.push(tail);
+
+  if (!events.length) {
+    container.innerHTML = '<div class="status warn">No events found — regex did not match in sample.</div>'; return;
+  }
+
+  let html = `<div class="status ok" style="margin-bottom:10px;">${events.length} event${events.length !== 1 ? 's' : ''} detected</div>`;
+  events.forEach((ev, i) => {
+    html += `<div class="event-wrap">
+      <div class="event-num">Event ${i + 1}</div>
+      <div class="event-block">${esc(ev)}</div>
+    </div>`;
+  });
+  container.innerHTML = html;
+}
+
+// ── TIMESTAMP TEST ────────────────────────────────────────────────────────────
+document.getElementById('testTimestampBtn').addEventListener('click', runTimestampTest);
+
+function runTimestampTest() {
+  const sample      = document.getElementById('logSample').value;
+  const timePrefix  = document.getElementById('timePrefix').value;
+  const timeFormat  = document.getElementById('timeFormat').value;
+  const maxLookahead = parseInt(document.getElementById('maxTsLookahead').value) || 80;
+  const container   = document.getElementById('timestampResults');
+  container.innerHTML = '';
+
+  const lines = sample.split(/\r?\n/).filter(l => l.trim());
+  if (!lines.length) {
+    container.innerHTML = '<div class="status warn">Paste a log sample above first.</div>'; return;
+  }
+
+  if (!timePrefix && !timeFormat) {
+    container.innerHTML = '<div class="status warn">Set TIME_PREFIX and/or TIME_FORMAT in the parser settings first.</div>'; return;
+  }
+
+  // Build the format regex once
+  let fmtRegexStr = '';
+  if (timeFormat) {
+    try { fmtRegexStr = timeFormatToRegex(timeFormat); }
+    catch(e) {
+      container.innerHTML = `<div class="status err">TIME_FORMAT parse error: ${esc(e.message)}</div>`; return;
+    }
+  }
+
+  let fmtRx = null;
+  if (fmtRegexStr) {
+    try { fmtRx = new RegExp(fmtRegexStr); }
+    catch(e) {
+      container.innerHTML = `<div class="status err">Regex compile error: ${esc(e.message)}<br><small style="color:#888">Generated pattern: ${esc(fmtRegexStr)}</small></div>`; return;
+    }
+  }
+
+  // Show derived regex
+  let headerHtml = '';
+  if (fmtRegexStr) {
+    headerHtml = `<div style="margin-bottom:12px;padding:8px 14px;background:#0d1020;border:1px solid #2e3244;border-radius:6px;">
+      <span style="font-size:0.67rem;color:#555;text-transform:uppercase;letter-spacing:0.08em;">Derived TIME_FORMAT regex</span><br>
+      <code style="color:#c792ea;font-family:monospace;font-size:0.78rem;word-break:break-all;">${esc(fmtRegexStr)}</code>
+    </div>`;
+  }
+
+  let resultsHtml = headerHtml;
+  const maxLines = Math.min(lines.length, 5);
+
+  for (let li = 0; li < maxLines; li++) {
+    const line       = lines[li];
+    const lookahead  = line.slice(0, maxLookahead);
+    let   searchIn   = lookahead;
+    let   prefixOk   = true;
+    let   prefixMsg  = '';
+
+    if (timePrefix) {
+      const idx = lookahead.indexOf(timePrefix);
+      if (idx === -1) {
+        prefixOk = false;
+        prefixMsg = `TIME_PREFIX <span style="color:#f87171">not found</span> in lookahead window`;
+      } else {
+        searchIn = lookahead.slice(idx + timePrefix.length);
+        prefixMsg = `Found at offset <span style="color:#4ade80">${idx}</span>`;
+      }
+    }
+
+    let matchText = '';
+    let matchOk   = false;
+    let matchMsg  = '';
+
+    if (prefixOk && fmtRx) {
+      const m = fmtRx.exec(searchIn);
+      if (m) {
+        matchText = m[0];
+        matchOk   = true;
+        matchMsg  = `<span style="color:#4ade80">${esc(matchText)}</span>`;
+      } else {
+        matchMsg = `<span style="color:#f87171">No match — format does not match text after prefix</span>`;
+      }
+    }
+
+    // Build highlighted line
+    const fullMatch = timePrefix + matchText;
+    let highlighted = esc(line);
+    if (matchOk && fullMatch) {
+      const safeMatch = escRegex(fullMatch);
+      highlighted = line.replace(new RegExp(safeMatch), `<mark class="ts-match">${esc(fullMatch)}</mark>`);
+    }
+
+    resultsHtml += `
+      <div style="margin-bottom:14px;">
+        <div style="font-size:0.67rem;color:#5b7cf6;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;margin-bottom:6px;">
+          Line ${li + 1}${li === 0 ? ' <span style="color:#555;font-weight:400">(first event)</span>' : ''}
+        </div>
+        <div class="ts-result-box">
+          ${timePrefix ? `<div class="ts-row"><span class="ts-key">TIME_PREFIX match</span><span class="ts-val">${prefixMsg}</span></div>` : ''}
+          ${fmtRx && prefixOk ? `<div class="ts-row"><span class="ts-key">TIME_FORMAT match</span><span class="ts-val">${matchMsg}</span></div>` : ''}
+          <div class="ts-highlight-box">
+            <div class="ts-highlight-label">Log line (match highlighted)</div>
+            <div>${highlighted}</div>
+          </div>
+        </div>
+      </div>`;
+  }
+
+  if (lines.length > maxLines) {
+    resultsHtml += `<div class="status" style="color:#555;font-size:0.75rem;">Showing first ${maxLines} of ${lines.length} lines.</div>`;
+  }
+
+  container.innerHTML = resultsHtml;
+}
+
+// ── GENERATE props.conf ───────────────────────────────────────────────────────
+function generateConf() {
+  const sourcetype = document.getElementById('sourcetypeName').value.trim() || 'my:sourcetype';
+  const lines = [];
+
+  function add(key, val) {
+    if (val !== '' && val !== null && val !== undefined) {
+      lines.push({ key, val: String(val) });
+    }
+  }
+
+  add('SHOULD_LINEMERGE',       document.getElementById('shouldLineMerge').checked ? 'true' : 'false');
+
+  const lb = document.getElementById('lineBreaker').value.trim();
+  if (lb) add('LINE_BREAKER', lb);
+
+  add('NO_BINARY_CHECK', document.getElementById('noBinaryCheck').checked ? 'true' : 'false');
+
+  const charset = document.getElementById('charset').value;
+  if (charset) add('CHARSET', charset);
+
+  const maxTs = document.getElementById('maxTsLookahead').value.trim();
+  if (maxTs) add('MAX_TIMESTAMP_LOOKAHEAD', maxTs);
+
+  const truncate = document.getElementById('truncate').value.trim();
+  if (truncate) add('TRUNCATE', truncate);
+
+  const timeFormat = document.getElementById('timeFormat').value.trim();
+  if (timeFormat) add('TIME_FORMAT', timeFormat);
+
+  const timePrefix = document.getElementById('timePrefix').value.trim();
+  if (timePrefix) add('TIME_PREFIX', timePrefix);
+
+  add('disabled', document.getElementById('disabled').checked ? 'true' : 'false');
+
+  const tz = document.getElementById('tzField').value.trim();
+  if (tz) add('TZ', tz);
+
+  const kvMode = document.getElementById('kvMode').value;
+  if (kvMode) add('KV_MODE', kvMode);
+
+  const indexedEx = document.getElementById('indexedExtractions').value.trim();
+  if (indexedEx) add('INDEXED_EXTRACTIONS', indexedEx);
+
+  const transforms = document.getElementById('transforms').value.trim();
+  if (transforms) add('TRANSFORMS', transforms);
+
+  // Custom fields
+  document.querySelectorAll('.custom-field-row').forEach(row => {
+    const k = row.querySelector('.cf-key').value.trim();
+    const v = row.querySelector('.cf-val').value.trim();
+    if (k) add(k, v);
+  });
+
+  // Render with syntax tinting
+  const keyWidth = Math.max(...lines.map(l => l.key.length), 4);
+  let html = `<span class="conf-section">[${esc(sourcetype)}]</span>\n`;
+  lines.forEach(({ key, val }) => {
+    html += `<span class="conf-key">${esc(key)}</span> <span class="conf-eq">=</span> <span class="conf-val">${esc(val)}</span>\n`;
+  });
+
+  document.getElementById('confOutput').innerHTML = html;
+}
+
+// Auto-generate on any field change
+const AUTO_IDS = [
+  'sourcetypeName','lineBreaker','timePrefix','timeFormat',
+  'maxTsLookahead','tzField','truncate','charset','kvMode',
+  'indexedExtractions','transforms'
+];
+AUTO_IDS.forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', generateConf);
+});
+['shouldLineMerge','noBinaryCheck','disabled','charset','kvMode'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', generateConf);
+});
+
+document.getElementById('generateBtn').addEventListener('click', generateConf);
+
+// ── COPY ──────────────────────────────────────────────────────────────────────
+document.getElementById('copyBtn').addEventListener('click', () => {
+  const text = document.getElementById('confOutput').innerText;
+  if (!text.trim()) { alert('Nothing to copy — generate the config first.'); return; }
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = document.getElementById('copyBtn');
+    const orig = btn.innerHTML;
+    btn.innerHTML = '&#10003; Copied!';
+    btn.classList.add('copy-done');
+    setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copy-done'); }, 2000);
+  }).catch(() => {
+    // Fallback for browsers without clipboard API
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
+});
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+generateConf();
+</script>
+</body>
+</html>
