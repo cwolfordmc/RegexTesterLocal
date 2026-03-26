@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Log Date Regex + strftime Builder</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: Arial, sans-serif;
+    }
+    body {
+      margin: 0;
+      padding: 1.25rem;
+      line-height: 1.4;
+      background: #111;
+      color: #eee;
+    }
+    .container {
+      max-width: 980px;
+      margin: 0 auto;
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 1.5rem;
+    }
+    .card {
+      background: #1e1e1e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      padding: 1rem;
+      margin-bottom: 1rem;
+    }
+    label {
+      display: block;
+      margin-bottom: 0.4rem;
+      font-weight: 600;
+    }
+    input,
+    textarea,
+    button {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid #444;
+      border-radius: 6px;
+      background: #0f0f0f;
+      color: #eee;
+      padding: 0.6rem 0.7rem;
+      font: inherit;
+    }
+    textarea {
+      min-height: 90px;
+      resize: vertical;
+    }
+    .row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1rem;
+    }
+    @media (max-width: 760px) {
+      .row {
+        grid-template-columns: 1fr;
+      }
+    }
+    .mono {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      white-space: pre-wrap;
+      word-break: break-word;
+      background: #0b0b0b;
+      border: 1px solid #333;
+      border-radius: 6px;
+      padding: 0.8rem;
+      min-height: 2.2rem;
+    }
+    .small {
+      font-size: 0.92rem;
+      color: #b7b7b7;
+    }
+    .actions {
+      display: flex;
+      gap: 0.6rem;
+      margin-top: 0.8rem;
+    }
+    .actions button {
+      width: auto;
+      padding: 0.55rem 0.9rem;
+      cursor: pointer;
+    }
+    .ok {
+      color: #7ad97a;
+    }
+    .warn {
+      color: #ffd479;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Log Date Field Regex + strftime Builder</h1>
+    <p class="small">
+      Enter a full log line and the exact date/time substring from that line. The tool generates:
+      (1) a regex with a capture group for the datetime field, and (2) a best-effort
+      <code>strftime</code> format for that field.
+    </p>
+
+    <div class="card">
+      <label for="logLine">Sample log line</label>
+      <textarea id="logLine" placeholder="2026-03-26 14:22:07 INFO app started"></textarea>
+
+      <div class="row" style="margin-top: 0.8rem;">
+        <div>
+          <label for="dateField">Date/time field (exact text from log line)</label>
+          <input id="dateField" placeholder="2026-03-26 14:22:07" />
+        </div>
+        <div>
+          <label for="flags">Regex flags</label>
+          <input id="flags" value="" placeholder="e.g. i" />
+        </div>
+      </div>
+
+      <div class="actions">
+        <button id="buildBtn" type="button">Build</button>
+        <button id="demoBtn" type="button">Load Demo</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <label>Generated regex (capture group 1 is datetime)</label>
+      <div class="mono" id="regexOut"></div>
+      <p id="regexStatus" class="small"></p>
+    </div>
+
+    <div class="card">
+      <label>Generated strftime format (best effort)</label>
+      <div class="mono" id="strftimeOut"></div>
+      <p id="strftimeStatus" class="small"></p>
+    </div>
+  </div>
+
+  <script>
+    function escapeRegexLiteral(text) {
+      return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    }
+
+    function detectTokenType(str, start, len) {
+      const part = str.slice(start, start + len);
+      const s = start;
+      if (!/^\d+$/.test(part)) {
+        return null;
+      }
+      if (len === 4) {
+        return { regex: "\\d{4}", fmt: "%Y" };
+      }
+      if (len === 3 && s > 0 && str[s - 1] === ".") {
+        return { regex: "\\d{3}", fmt: "%f" };
+      }
+      if (len === 2) {
+        const prev = s > 0 ? str[s - 1] : "";
+        const next = s + len < str.length ? str[s + len] : "";
+        if (prev === ":" || next === ":") {
+          return { regex: "\\d{2}", fmt: "%H" };
+        }
+        if ((prev === "-" && next === "-") || (prev === "/" && next === "/")) {
+          return { regex: "\\d{2}", fmt: "%m" };
+        }
+        if ((prev === "-" && next === " ") || (prev === "/" && next === " ")) {
+          return { regex: "\\d{2}", fmt: "%d" };
+        }
+        if (prev === ":" && (next === ":" || next === "." || next === " " || next === "Z" || next === "+" || next === "-")) {
+          return { regex: "\\d{2}", fmt: "%S" };
+        }
+        if ((prev === "+" || prev === "-") && next === ":") {
+          return { regex: "\\d{2}", fmt: "%z" };
+        }
+        if (prev === ":" && (next === "+" || next === "-" || next === "Z" || next === "")) {
+          return { regex: "\\d{2}", fmt: "%M" };
+        }
+        return { regex: "\\d{2}", fmt: "%m" };
+      }
+      if (len === 1) {
+        return { regex: "\\d", fmt: "%-d" };
+      }
+      return { regex: "\\d{" + len + "}", fmt: null };
+    }
+
+    function mapDateFieldToPattern(dateField) {
+      const monthNames = [
+        "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+        "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"
+      ];
+      let regex = "";
+      let fmt = "";
+      let i = 0;
+      let uncertain = false;
+
+      while (i < dateField.length) {
+        const c = dateField[i];
+
+        if (/[A-Za-z]/.test(c)) {
+          const rest = dateField.slice(i);
+          const m3 = rest.match(/^[A-Za-z]{3}/);
+          const mWord = rest.match(/^[A-Za-z]+/);
+          if (m3 && monthNames.includes(m3[0])) {
+            regex += "[A-Za-z]{3}";
+            fmt += "%b";
+            i += 3;
+            continue;
+          }
+          if (mWord) {
+            regex += "[A-Za-z]+";
+            fmt += "%Z";
+            i += mWord[0].length;
+            uncertain = true;
+            continue;
+          }
+        }
+
+        if (/\d/.test(c)) {
+          const mDigits = dateField.slice(i).match(/^\d+/)[0];
+          const token = detectTokenType(dateField, i, mDigits.length);
+          if (token) {
+            regex += token.regex;
+            if (token.fmt) {
+              fmt += token.fmt;
+            } else {
+              fmt += "{unknown}";
+              uncertain = true;
+            }
+          }
+          i += mDigits.length;
+          continue;
+        }
+
+        regex += escapeRegexLiteral(c);
+        fmt += c;
+        i += 1;
+      }
+
+      return { regex, fmt, uncertain };
+    }
+
+    function buildOutputs() {
+      const logLine = document.getElementById("logLine").value;
+      const dateField = document.getElementById("dateField").value;
+      const flags = document.getElementById("flags").value;
+      const regexOut = document.getElementById("regexOut");
+      const regexStatus = document.getElementById("regexStatus");
+      const strftimeOut = document.getElementById("strftimeOut");
+      const strftimeStatus = document.getElementById("strftimeStatus");
+
+      if (!logLine || !dateField) {
+        regexOut.textContent = "";
+        strftimeOut.textContent = "";
+        regexStatus.textContent = "Please fill both inputs.";
+        strftimeStatus.textContent = "";
+        regexStatus.className = "small warn";
+        return;
+      }
+
+      const idx = logLine.indexOf(dateField);
+      if (idx < 0) {
+        regexOut.textContent = "";
+        strftimeOut.textContent = "";
+        regexStatus.textContent = "Date/time field not found in the log line (exact match required).";
+        strftimeStatus.textContent = "";
+        regexStatus.className = "small warn";
+        return;
+      }
+
+      const left = logLine.slice(0, idx);
+      const right = logLine.slice(idx + dateField.length);
+      const mapped = mapDateFieldToPattern(dateField);
+      const fullRegexText = "^" + escapeRegexLiteral(left) + "(" + mapped.regex + ")" + escapeRegexLiteral(right) + "$";
+
+      regexOut.textContent = fullRegexText;
+      strftimeOut.textContent = mapped.fmt;
+
+      try {
+        const re = new RegExp(fullRegexText, flags);
+        const match = re.exec(logLine);
+        if (match && match[1] === dateField) {
+          regexStatus.textContent = "Regex validates against sample log line and captures the datetime field.";
+          regexStatus.className = "small ok";
+        } else {
+          regexStatus.textContent = "Regex built, but sample validation failed.";
+          regexStatus.className = "small warn";
+        }
+      } catch (e) {
+        regexStatus.textContent = "Invalid flags or regex: " + e.message;
+        regexStatus.className = "small warn";
+      }
+
+      if (mapped.uncertain || mapped.fmt.includes("{unknown}")) {
+        strftimeStatus.textContent = "Best-effort format guess. Review tokens like timezone/fractional seconds.";
+        strftimeStatus.className = "small warn";
+      } else {
+        strftimeStatus.textContent = "Format mapped from the sample date field.";
+        strftimeStatus.className = "small ok";
+      }
+    }
+
+    document.getElementById("buildBtn").addEventListener("click", buildOutputs);
+    document.getElementById("demoBtn").addEventListener("click", function () {
+      document.getElementById("logLine").value = "2026-03-26 14:22:07,123 INFO api Gateway started";
+      document.getElementById("dateField").value = "2026-03-26 14:22:07,123";
+      document.getElementById("flags").value = "";
+      buildOutputs();
+    });
+  </script>
+</body>
+</html>
